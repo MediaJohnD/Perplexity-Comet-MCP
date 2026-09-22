@@ -620,7 +620,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const finalStatus = await cometAI.getAgentStatus();
         if (
           finalStatus.response &&
-          finalStatus.response.length > 50 &&
+          // Any non-empty response is worth returning here — this is the
+          // last-resort fallback after the timeout loop already gave the
+          // completion conditions above every chance to fire. Requiring
+          // >50 chars meant a short, complete answer (e.g. "Paris" or
+          // "Yes.") that only reached this branch was discarded entirely
+          // and the caller got "still in progress" instead.
           finalStatus.response !== oldResponseSnapshot
         ) {
           completeTask(finalStatus.response);
