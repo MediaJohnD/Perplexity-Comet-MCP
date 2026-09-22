@@ -53,12 +53,13 @@ function isAnswerProseElement(el: HTMLElement): boolean {
   if (el.closest("nav, aside, header, footer, form, [contenteditable]")) return false;
   const text = el.innerText.trim();
   if (text.length === 0) return false;
-  // Nav/sidebar labels render as just the label, optionally with a trailing
-  // badge count ("Library", "Discover 3"). A real answer that happens to
-  // *start* with one of these words ("Search results show...") is a full
-  // sentence, much longer than "label + short badge" — so match only when
-  // the text is (close to) the label itself, not merely prefixed by it.
-  return !PROSE_UI_LABELS.some((label) => text === label || (text.startsWith(label) && text.length <= label.length + 4));
+  // Exact match only. A prefix/length-based heuristic ("close enough to the
+  // label") still misclassified genuine short answers that happen to start
+  // with a label word ("Home is where...", "Search..."), which defeats the
+  // whole point of supporting short answers. Nav/sidebar items render as
+  // exactly their label text (a badge count, if any, is a sibling element,
+  // not part of this node's own innerText), so exact match loses nothing.
+  return !PROSE_UI_LABELS.includes(text);
 }
 
 export function extractAgentStatus(): AgentStatusResult {
