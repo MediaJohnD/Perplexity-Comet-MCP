@@ -69,18 +69,15 @@ describe("CometAI.resetStabilityTracking", () => {
 describe("CometAI.getAgentStatus", () => {
   it("returns the parsed shape from a canned safeEvaluate result", async () => {
     const fake = new FakeCdpClient();
-    const canned = () => ({
+    fake.setEvaluateResult({
       status: "completed",
       steps: ["Searching for X", "Reading results"],
       currentStep: "Reading results",
       response: "the agent's final answer",
       hasStopButton: false,
     });
-    fake.setEvaluateResult(canned());
+
     const ai = new CometAI(fake);
-    // First poll of a fresh answer is never final: the text may still be streaming.
-    expect((await ai.getAgentStatus()).status).toBe("working");
-    fake.setEvaluateResult(canned()); // fake hands back the same object, which the first poll mutated
     const status = await ai.getAgentStatus();
 
     expect(status.status).toBe("completed");
@@ -90,6 +87,24 @@ describe("CometAI.getAgentStatus", () => {
     expect(status.hasStopButton).toBe(false);
     expect(status.agentBrowsingUrl).toBe("");
     expect(typeof status.isStable).toBe("boolean");
+  });
+
+  it("holds a long 'completed' answer as working until the text is stable", async () => {
+    const fake = new FakeCdpClient();
+    const canned = () => ({
+      status: "completed",
+      steps: [],
+      currentStep: "",
+      response: "A long answer that is still streaming in after the Stop button disappeared.",
+      hasStopButton: false,
+    });
+    fake.setEvaluateResult(canned());
+    const ai = new CometAI(fake);
+    expect((await ai.getAgentStatus()).status).toBe("working");
+    fake.setEvaluateResult(canned()); // fake returns the same object, which the poll mutated
+    expect((await ai.getAgentStatus()).status).toBe("working");
+    fake.setEvaluateResult(canned());
+    expect((await ai.getAgentStatus()).status).toBe("completed"); // third identical poll
   });
 
   it("includes the agent-browsing URL when listTabsCategorized returns one", async () => {
