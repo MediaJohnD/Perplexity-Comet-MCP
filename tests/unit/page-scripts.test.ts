@@ -100,6 +100,17 @@ describe("extractAgentStatus", () => {
     expect(extractAgentStatus().status).toBe("idle");
   });
 
+  it("ignores an earlier turn's 'Researched' marker while the new turn is still streaming", () => {
+    document.body.innerHTML = `
+      <main>
+        <div>Researched 1s</div>
+        <div class="prose">Old answer to the first question, fully done.</div>
+        <div class="prose">New answer still streaming in right now</div>
+      </main>
+    `;
+    expect(extractAgentStatus().status).not.toBe("completed");
+  });
+
   it("returns 'completed' for Russian singular 'Выполнен 1 шаг'", () => {
     const main = document.createElement("main");
     const m = document.createElement("div");

@@ -101,7 +101,16 @@ export function extractAgentStatus(): AgentStatusResult {
                           && !hasActiveStopButton;
   const hasReviewedSources = /Reviewed \d+ sources?/i.test(body);
   // Sidecar / newer UI: "Researched 12s" replaces the steps and sources markers.
-  const hasResearchedMarker = /\bResearched\s+\d+\s*(?:s|m|sec|min)\b/i.test(body);
+  // Only the latest turn's marker counts: an earlier turn's answer block sitting
+  // after the last marker means that marker belongs to a previous turn.
+  const researchedMatches = [...body.matchAll(/\bResearched\s+\d+\s*(?:s|m|sec|min)\b/gi)];
+  const lastResearched = researchedMatches[researchedMatches.length - 1];
+  const answerBlocks = ([...document.querySelectorAll('[class*="prose"]')] as HTMLElement[])
+    .filter((el) => isAnswerProseElement(el))
+    .filter((el, _i, all) => !all.some((o) => o !== el && o.contains(el)));
+  const prevAnswer = answerBlocks.length > 1 ? answerBlocks[answerBlocks.length - 2].innerText.trim().substring(0, 40) : "";
+  const hasResearchedMarker = !!lastResearched
+    && !(prevAnswer && body.indexOf(prevAnswer, lastResearched.index ?? 0) !== -1);
   const hasSourcesIndicator = /\d+\s*sources?/i.test(body)              // en
                            || /\d+\s*источник(?:а|ов)?/iu.test(body);    // ru
   const hasAskFollowUp = body.includes("Ask a follow-up")
