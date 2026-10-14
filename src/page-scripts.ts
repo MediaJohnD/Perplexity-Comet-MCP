@@ -33,36 +33,21 @@ export interface AgentStatusResult {
   hasStopButton: boolean;
 }
 
-// UI chrome that renders inside `[class*="prose"]`-tagged containers but is
-// never the agent's answer (sidebar labels, nav items, etc). Kept as one
-// list so the "is this really the response" check is identical everywhere
-// it's applied, instead of two call sites drifting apart.
-const PROSE_UI_LABELS = [
-  "Library", "Discover", "Spaces", "Finance", "Account",
-  "Upgrade", "Home", "Search",
-];
-
-/**
- * True if `el` looks like part of the agent's rendered answer rather than
- * page chrome. Excludes elements inside nav/aside/header/footer/form regions
- * and elements whose text is (or starts with) a known UI label. No minimum
- * length: a genuine short answer ("Yes.", "Paris") must still pass, so the
- * exclusion has to be about *what* the element is, not how long its text is.
- */
-function isAnswerProseElement(el: HTMLElement): boolean {
-  if (el.closest("nav, aside, header, footer, form, [contenteditable]")) return false;
-  const text = el.innerText.trim();
-  if (text.length === 0) return false;
-  // Exact match only. A prefix/length-based heuristic ("close enough to the
-  // label") still misclassified genuine short answers that happen to start
-  // with a label word ("Home is where...", "Search..."), which defeats the
-  // whole point of supporting short answers. Nav/sidebar items render as
-  // exactly their label text (a badge count, if any, is a sibling element,
-  // not part of this node's own innerText), so exact match loses nothing.
-  return !PROSE_UI_LABELS.includes(text);
-}
-
 export function extractAgentStatus(): AgentStatusResult {
+  // Helpers live inside the function: it is stringified and evaluated in the
+  // page, so module-level names would be undefined there.
+  const PROSE_UI_LABELS = [
+    "Library", "Discover", "Spaces", "Finance", "Account",
+    "Upgrade", "Home", "Search",
+  ];
+  // True if `el` is part of the agent's answer rather than page chrome. No
+  // minimum length (short answers are valid); exact label match only, since
+  // nav items render as exactly their label text.
+  const isAnswerProseElement = (el: HTMLElement): boolean => {
+    if (el.closest("nav, aside, header, footer, form, [contenteditable]")) return false;
+    const text = el.innerText.trim();
+    return text.length > 0 && !PROSE_UI_LABELS.includes(text);
+  };
   const body = document.body.innerText;
 
   // Check for active stop button (more comprehensive check)
@@ -176,6 +161,17 @@ export function extractAgentStatus(): AgentStatusResult {
     const mainContent = (document.querySelector("main") || document.body) as HTMLElement;
     const bodyText = mainContent.innerText;
 
+    // A marker is stale when an earlier turn's answer block sits after it: the
+    // marker then belongs to a previous turn, and taking text after it would
+    // return that older answer (plus the new one). Each turn has its own
+    // outermost prose block, so look at the one before the latest.
+    const turnBlocks = ([...mainContent.querySelectorAll('[class*="prose"]')] as HTMLElement[])
+      .filter((el) => isAnswerProseElement(el))
+      .filter((el, _i, all) => !all.some((o) => o !== el && o.contains(el)));
+    const prevBlock = turnBlocks.length > 1 ? turnBlocks[turnBlocks.length - 2].innerText.trim().substring(0, 40) : "";
+    const isStaleMarker = (markerIndex: number) =>
+      prevBlock.length > 0 && bodyText.indexOf(prevBlock, markerIndex) !== -1;
+
     // Strategy 1: Find content after "X steps completed" marker (agent's final response).
     // In multi-turn chats Perplexity keeps previous-turn markers in the
     // scroll buffer, and the marker text differs across turns ("3 steps
@@ -185,7 +181,7 @@ export function extractAgentStatus(): AgentStatusResult {
     // Walk every match with the /g flag and take the last one.
     const stepsMatches = [...bodyText.matchAll(/(\d+)\s*steps?\s*completed/gi)];
     const stepsMatch = stepsMatches.length > 0 ? stepsMatches[stepsMatches.length - 1] : null;
-    if (stepsMatch) {
+    if (stepsMatch && !isStaleMarker(stepsMatch.index ?? 0)) {
       const markerIndex = stepsMatch.index ?? -1;
       if (markerIndex !== -1) {
         // Get everything after the marker
@@ -216,7 +212,7 @@ export function extractAgentStatus(): AgentStatusResult {
       // Same rationale as Strategy 1: walk every match and take the last.
       const sourcesMatches = [...bodyText.matchAll(/Reviewed\s+\d+\s+sources?/gi)];
       const sourcesMatch = sourcesMatches.length > 0 ? sourcesMatches[sourcesMatches.length - 1] : null;
-      if (sourcesMatch) {
+      if (sourcesMatch && !isStaleMarker(sourcesMatch.index ?? 0)) {
         const markerIndex = sourcesMatch.index ?? -1;
         if (markerIndex !== -1) {
           let afterMarker = bodyText.substring(markerIndex + sourcesMatch[0].length).trim();

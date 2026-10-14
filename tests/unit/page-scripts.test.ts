@@ -184,6 +184,43 @@ describe("extractAgentStatus", () => {
     expect(result.response).not.toContain("Old moon");
   });
 
+  it("ignores a steps-completed marker that belongs to an earlier turn", () => {
+    document.body.innerHTML = `
+      <main>
+        <div>3 steps completed</div>
+        <div class="prose">Old agent answer that is comfortably longer than fifty characters in total.</div>
+        <div class="prose">
+          <div class="prose-p">New Mars bullet one that is long enough.</div>
+          <div class="prose-p">New Mars bullet two that is long enough.</div>
+        </div>
+        <div>Ask a follow-up</div>
+      </main>`;
+
+    const result = extractAgentStatus();
+    expect(result.response).toContain("New Mars bullet two");
+    expect(result.response).not.toContain("Old agent answer");
+  });
+
+  it("still uses the steps-completed marker for the current turn", () => {
+    document.body.innerHTML = `
+      <main>
+        <div class="prose">Old agent answer that is comfortably longer than fifty characters in total.</div>
+        <div>4 steps completed</div>
+        <div class="prose">New agent answer that is comfortably longer than fifty characters in total.</div>
+        <div>Ask a follow-up</div>
+      </main>`;
+
+    const result = extractAgentStatus();
+    expect(result.response).toContain("New agent answer");
+    expect(result.response).not.toContain("Old agent answer");
+  });
+
+  it("works when stringified and evaluated alone, as it is in the page", () => {
+    document.body.innerHTML = `<main><div class="prose">Paris is the capital of France, a long enough answer.</div><div>Ask a follow-up</div></main>`;
+    const viaString = (0, eval)(`(${extractAgentStatus.toString()})()`);
+    expect(viaString.response).toContain("Paris");
+  });
+
   it("keeps a legitimate answer of 'Perplexity' while stripping badge labels", () => {
     document.body.innerHTML = `<main><div class="prose">Perplexity</div><div>Ask a follow-up</div></main>`;
     expect(extractAgentStatus().response.toLowerCase()).toBe("perplexity");
