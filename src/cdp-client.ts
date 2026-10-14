@@ -292,10 +292,13 @@ async function windowsFetch(
   // On Windows or WSL, use PowerShell to reach Windows localhost
   try {
     const safeUrl = psSingleQuote(url);
+    // Module-qualified: a stray file named "Invoke-WebRequest" on PATH (e.g. in
+    // System32) otherwise shadows the cmdlet ("Cannot run a document in the middle of a pipeline").
+    const iwr = "Microsoft.PowerShell.Utility\\Invoke-WebRequest";
     const psCommand =
       method === "PUT"
-        ? `Invoke-WebRequest -Uri '${safeUrl}' -Method PUT -UseBasicParsing | Select-Object -ExpandProperty Content`
-        : `Invoke-WebRequest -Uri '${safeUrl}' -UseBasicParsing | Select-Object -ExpandProperty Content`;
+        ? `${iwr} -Uri '${safeUrl}' -Method PUT -UseBasicParsing | Select-Object -ExpandProperty Content`
+        : `${iwr} -Uri '${safeUrl}' -UseBasicParsing | Select-Object -ExpandProperty Content`;
 
     const result = execSync(
       `powershell.exe -NoProfile -Command "${psCommand}"`,
