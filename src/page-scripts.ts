@@ -109,6 +109,9 @@ export function extractAgentStatus(): AgentStatusResult {
     .filter((el) => isAnswerProseElement(el))
     .filter((el, _i, all) => !all.some((o) => o !== el && o.contains(el)));
   const prevAnswer = answerBlocks.length > 1 ? answerBlocks[answerBlocks.length - 2].innerText.trim().substring(0, 40) : "";
+  // Known limit: before a new turn renders any prose, the page is identical to a
+  // finished single-turn page. comet_ask covers that window with its pre-send
+  // snapshot (stale-answer guard) and the 3-poll stability gate.
   const hasResearchedMarker = !!lastResearched
     && !(prevAnswer && body.indexOf(prevAnswer, lastResearched.index ?? 0) !== -1);
   const hasSourcesIndicator = /\d+\s*sources?/i.test(body)              // en
