@@ -201,6 +201,19 @@ describe("extractAgentStatus", () => {
     expect(result.response).not.toContain("Old agent answer");
   });
 
+  it("returns only the latest single-block answer when an earlier turn left a steps marker", () => {
+    document.body.innerHTML = `
+      <main>
+        <div>3 steps completed</div>
+        <div class="prose">Old agent answer that is comfortably longer than fifty characters in total.</div>
+        <div class="prose">New short answer.</div>
+        <div>Ask a follow-up</div>
+      </main>`;
+
+    const result = extractAgentStatus();
+    expect(result.response).toBe("New short answer.");
+  });
+
   it("still uses the steps-completed marker for the current turn", () => {
     document.body.innerHTML = `
       <main>

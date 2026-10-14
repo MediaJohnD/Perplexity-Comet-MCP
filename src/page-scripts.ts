@@ -169,8 +169,12 @@ export function extractAgentStatus(): AgentStatusResult {
       .filter((el) => isAnswerProseElement(el))
       .filter((el, _i, all) => !all.some((o) => o !== el && o.contains(el)));
     const prevBlock = turnBlocks.length > 1 ? turnBlocks[turnBlocks.length - 2].innerText.trim().substring(0, 40) : "";
-    const isStaleMarker = (markerIndex: number) =>
-      prevBlock.length > 0 && bodyText.indexOf(prevBlock, markerIndex) !== -1;
+    let sawStaleMarker = false;
+    const isStaleMarker = (markerIndex: number) => {
+      const stale = prevBlock.length > 0 && bodyText.indexOf(prevBlock, markerIndex) !== -1;
+      if (stale) sawStaleMarker = true;
+      return stale;
+    };
 
     // Strategy 1: Find content after "X steps completed" marker (agent's final response).
     // In multi-turn chats Perplexity keeps previous-turn markers in the
@@ -242,7 +246,8 @@ export function extractAgentStatus(): AgentStatusResult {
       const outer = candidates.filter((el) => !candidates.some((o) => o !== el && o.contains(el)));
       const lastOuter = outer[outer.length - 1];
       const hasNested = !!lastOuter && candidates.some((o) => o !== lastOuter && lastOuter.contains(o));
-      const validTexts = (hasNested ? [lastOuter] : outer).map((el) => el.innerText.trim());
+      // A stale marker proves earlier turns are on the page, so never join them in.
+      const validTexts = (hasNested || sawStaleMarker ? [lastOuter] : outer).map((el) => el.innerText.trim());
 
       // Combine all valid prose texts, taking the last/most recent ones
       if (validTexts.length > 0) {

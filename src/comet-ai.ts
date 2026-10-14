@@ -288,6 +288,8 @@ export class CometAI {
   // one; renaming the constant to match what the code actually does.
   private lastResponseText: string = '';
   private stableResponseCount: number = 0;
+  private lastShortResponse: string = '';
+  private shortStableCount: number = 0;
   private readonly STABLE_REPEATS_REQUIRED: number = 2;
 
   /**
@@ -315,6 +317,8 @@ export class CometAI {
   resetStabilityTracking(): void {
     this.lastResponseText = '';
     this.stableResponseCount = 0;
+    this.lastShortResponse = '';
+    this.shortStableCount = 0;
   }
 
   /**
@@ -353,6 +357,16 @@ export class CometAI {
     }
     if (statusResult.status === 'completed' && statusResult.response.length > 50 && !isStable) {
       statusResult.status = 'working';
+    }
+    // Short answers skip the stability tracker (it ignores <=50 chars): require two identical polls.
+    if (statusResult.status === 'completed' && statusResult.response.length <= 50) {
+      if (statusResult.response && statusResult.response === this.lastShortResponse) {
+        this.shortStableCount++;
+      } else {
+        this.lastShortResponse = statusResult.response;
+        this.shortStableCount = 0;
+      }
+      if (this.shortStableCount < 1) statusResult.status = 'working';
     }
 
     return {
