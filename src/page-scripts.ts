@@ -237,8 +237,12 @@ export function extractAgentStatus(): AgentStatusResult {
     // Strategy 3: Fallback - get all prose content combined
     if (!response || response.length < 50) {
       const allProseEls = [...mainContent.querySelectorAll('[class*="prose"]')] as HTMLElement[];
-      const validTexts = allProseEls
-        .filter((el) => isAnswerProseElement(el))
+      const candidates = allProseEls.filter((el) => isAnswerProseElement(el));
+      // The redesigned UI nests one prose block per bullet/paragraph inside an
+      // outer prose block holding the whole answer; keep outermost blocks only,
+      // otherwise "last 3" returns a random fragment of a multi-bullet answer.
+      const validTexts = candidates
+        .filter((el) => !candidates.some((o) => o !== el && o.contains(el)))
         .map((el) => el.innerText.trim());
 
       // Combine all valid prose texts, taking the last/most recent ones
@@ -255,6 +259,7 @@ export function extractAgentStatus(): AgentStatusResult {
         .replace(/Show more/gi, "")
         .replace(/Ask a follow-up/gi, "")
         .replace(/Ask anything\.*/gi, "")
+        .replace(/^perplexity$/gm, "") // citation badge label rendered after each paragraph
         .replace(/Add details to this task\.*/gi, "")
         .replace(/Задайте уточняющий вопрос/giu, "")        // ru
         .replace(/Последующие вопросы/giu, "")              // ru

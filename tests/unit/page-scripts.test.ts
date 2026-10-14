@@ -144,6 +144,26 @@ describe("extractAgentStatus", () => {
     expect(result.response).not.toContain("Previous turn answer");
   });
 
+  it("returns every bullet when the UI nests one prose block per bullet inside an outer prose block", () => {
+    document.body.innerHTML = `
+      <main>
+        <div class="prose">
+          <div class="prose-p">First bullet text that is long enough.<span>perplexity</span></div>
+          <div class="prose-p">Second bullet text that is long enough.<span>perplexity</span></div>
+          <div class="prose-p">Third bullet text that is long enough.<span>perplexity</span></div>
+          <div class="prose-p">Fourth bullet text that is long enough.<span>perplexity</span></div>
+        </div>
+        <div>1 source</div>
+        <div>Ask a follow-up</div>
+      </main>`;
+
+    const result = extractAgentStatus();
+    expect(result.status).toBe("completed");
+    for (const n of ["First", "Second", "Third", "Fourth"]) {
+      expect(result.response).toContain(`${n} bullet`);
+    }
+  });
+
   it("extracts and dedupes step descriptions matching the working patterns", () => {
     // Pattern matching runs against document.body.innerText.
     // Use one step per <div> so jsdom's innerText emits one per line.

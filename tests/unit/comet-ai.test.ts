@@ -69,15 +69,18 @@ describe("CometAI.resetStabilityTracking", () => {
 describe("CometAI.getAgentStatus", () => {
   it("returns the parsed shape from a canned safeEvaluate result", async () => {
     const fake = new FakeCdpClient();
-    fake.setEvaluateResult({
+    const canned = () => ({
       status: "completed",
       steps: ["Searching for X", "Reading results"],
       currentStep: "Reading results",
       response: "the agent's final answer",
       hasStopButton: false,
     });
-
+    fake.setEvaluateResult(canned());
     const ai = new CometAI(fake);
+    // First poll of a fresh answer is never final: the text may still be streaming.
+    expect((await ai.getAgentStatus()).status).toBe("working");
+    fake.setEvaluateResult(canned()); // fake hands back the same object, which the first poll mutated
     const status = await ai.getAgentStatus();
 
     expect(status.status).toBe("completed");

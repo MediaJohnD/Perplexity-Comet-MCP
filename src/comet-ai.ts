@@ -351,6 +351,9 @@ export class CometAI {
     if (isStable && statusResult.response.length > 50 && !statusResult.hasStopButton) {
       statusResult.status = 'completed';
     }
+    if (statusResult.status === 'completed' && statusResult.response.length > 50 && !isStable) {
+      statusResult.status = 'working';
+    }
 
     return {
       ...statusResult,
