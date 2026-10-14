@@ -239,11 +239,14 @@ export function extractAgentStatus(): AgentStatusResult {
       const allProseEls = [...mainContent.querySelectorAll('[class*="prose"]')] as HTMLElement[];
       const candidates = allProseEls.filter((el) => isAnswerProseElement(el));
       // The redesigned UI nests one prose block per bullet/paragraph inside an
-      // outer prose block holding the whole answer; keep outermost blocks only,
-      // otherwise "last 3" returns a random fragment of a multi-bullet answer.
-      const validTexts = candidates
-        .filter((el) => !candidates.some((o) => o !== el && o.contains(el)))
-        .map((el) => el.innerText.trim());
+      // outer prose block holding one whole answer. When the newest outermost
+      // block has nested blocks, it is the complete latest answer: use it alone
+      // (earlier turns are separate outer blocks). Otherwise keep the legacy
+      // sibling-block behaviour.
+      const outer = candidates.filter((el) => !candidates.some((o) => o !== el && o.contains(el)));
+      const lastOuter = outer[outer.length - 1];
+      const hasNested = !!lastOuter && candidates.some((o) => o !== lastOuter && lastOuter.contains(o));
+      const validTexts = (hasNested ? [lastOuter] : outer).map((el) => el.innerText.trim());
 
       // Combine all valid prose texts, taking the last/most recent ones
       if (validTexts.length > 0) {
@@ -259,7 +262,6 @@ export function extractAgentStatus(): AgentStatusResult {
         .replace(/Show more/gi, "")
         .replace(/Ask a follow-up/gi, "")
         .replace(/Ask anything\.*/gi, "")
-        .replace(/^perplexity$/gm, "") // citation badge label rendered after each paragraph
         .replace(/Add details to this task\.*/gi, "")
         .replace(/Задайте уточняющий вопрос/giu, "")        // ru
         .replace(/Последующие вопросы/giu, "")              // ru
@@ -269,6 +271,9 @@ export function extractAgentStatus(): AgentStatusResult {
         .replace(/^[>›→\s]+/gm, "") // Remove leading arrows
         .replace(/\n{3,}/g, "\n\n") // Collapse multiple newlines
         .trim();
+      // Citation-badge label rendered after each paragraph; keep a bare answer of "Perplexity".
+      const noBadge = response.replace(/^perplexity$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+      if (noBadge) response = noBadge;
     }
   }
 

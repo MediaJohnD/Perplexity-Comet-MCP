@@ -164,6 +164,31 @@ describe("extractAgentStatus", () => {
     }
   });
 
+  it("returns only the latest turn when earlier turns also use nested prose blocks", () => {
+    document.body.innerHTML = `
+      <main>
+        <div class="prose">
+          <div class="prose-p">Old moon bullet one that is long enough.</div>
+          <div class="prose-p">Old moon bullet two that is long enough.</div>
+        </div>
+        <div class="prose">
+          <div class="prose-p">New Mars bullet one that is long enough.</div>
+          <div class="prose-p">New Mars bullet two that is long enough.</div>
+        </div>
+        <div>Ask a follow-up</div>
+      </main>`;
+
+    const result = extractAgentStatus();
+    expect(result.response).toContain("New Mars bullet one");
+    expect(result.response).toContain("New Mars bullet two");
+    expect(result.response).not.toContain("Old moon");
+  });
+
+  it("keeps a legitimate answer of 'Perplexity' while stripping badge labels", () => {
+    document.body.innerHTML = `<main><div class="prose">Perplexity</div><div>Ask a follow-up</div></main>`;
+    expect(extractAgentStatus().response.toLowerCase()).toBe("perplexity");
+  });
+
   it("extracts and dedupes step descriptions matching the working patterns", () => {
     // Pattern matching runs against document.body.innerText.
     // Use one step per <div> so jsdom's innerText emits one per line.
