@@ -100,6 +100,8 @@ export function extractAgentStatus(): AgentStatusResult {
   const hasFinishedMarker = /\bFinished\b(?!\s+(?:reading|analyzing|browsing|searching|loading))/i.test(body)
                           && !hasActiveStopButton;
   const hasReviewedSources = /Reviewed \d+ sources?/i.test(body);
+  // Sidecar / newer UI: "Researched 12s" replaces the steps and sources markers.
+  const hasResearchedMarker = /\bResearched\s+\d+\s*(?:s|m|sec|min)\b/i.test(body);
   const hasSourcesIndicator = /\d+\s*sources?/i.test(body)              // en
                            || /\d+\s*источник(?:а|ов)?/iu.test(body);    // ru
   const hasAskFollowUp = body.includes("Ask a follow-up")
@@ -137,6 +139,8 @@ export function extractAgentStatus(): AgentStatusResult {
   } else if (hasSourcesIndicator && hasProseContent && !hasActiveStopButton) {
     status = "completed";
   } else if (hasReviewedSources && !hasActiveStopButton) {
+    status = "completed";
+  } else if (hasResearchedMarker && hasProseContent) {
     status = "completed";
   }
   // THIRD: Fall back to working text patterns (only if no completion signals)

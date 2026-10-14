@@ -82,6 +82,24 @@ describe("extractAgentStatus", () => {
     expect(result.response.length).toBeGreaterThan(0);
   });
 
+  it("returns 'completed' on the sidecar layout: 'Researched 1s' marker, no steps/sources/follow-up text", () => {
+    document.body.innerHTML = `
+      <main>
+        <div>Researched 1s</div>
+        <div class="prose"><div class="prose">First bullet of the answer.</div><div class="prose">Second bullet.</div></div>
+        <div>Ask anything…</div>
+      </main>
+    `;
+    const result = extractAgentStatus();
+    expect(result.status).toBe("completed");
+    expect(result.response).toContain("First bullet of the answer.");
+  });
+
+  it("does not treat 'Researched' without prose as completed", () => {
+    document.body.innerHTML = `<main><div>Researched 1s</div></main>`;
+    expect(extractAgentStatus().status).toBe("idle");
+  });
+
   it("returns 'completed' for Russian singular 'Выполнен 1 шаг'", () => {
     const main = document.createElement("main");
     const m = document.createElement("div");
