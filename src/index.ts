@@ -1057,10 +1057,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await cometClient.evaluate(`
           (() => {
             // Strategy 1: Direct button (wide screen)
+            const center = (el) => {
+              const r = el.getBoundingClientRect();
+              return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+            };
             const btn = document.querySelector('button[aria-label="${ariaLabel}"]');
             if (btn) {
-              btn.click();
-              return { success: true, method: 'button' };
+              return { success: true, method: 'button', at: center(btn) };
             }
 
             // Strategy 2: Dropdown menu (narrow screen)
@@ -1071,8 +1074,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               if ((text.includes('search') || text.includes('research') ||
                    text.includes('labs') || text.includes('learn')) &&
                   b.querySelector('svg')) {
-                b.click();
-                return { success: true, method: 'dropdown-open', needsSelect: true };
+                return { success: true, method: 'dropdown-open', needsSelect: true, at: center(b) };
               }
             }
 
@@ -1084,8 +1086,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           success: boolean;
           method?: string;
           needsSelect?: boolean;
+          at?: { x: number; y: number };
           error?: string;
         };
+
+        // CDP mouse events work without OS focus, unlike element.click()
+        if (clickResult.success && clickResult.at) {
+          await cometClient.clickAt(clickResult.at.x, clickResult.at.y);
+        }
 
         if (clickResult.success && clickResult.needsSelect) {
           // Wait for dropdown to open, then select the mode
@@ -1099,8 +1107,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               const items = document.querySelectorAll('[role="menuitem"], [role="option"], button');
               for (const item of items) {
                 if (item.innerText.toLowerCase().includes(${safeMode})) {
-                  item.click();
-                  return { success: true };
+                  const r = item.getBoundingClientRect();
+                  return { success: true, at: { x: r.left + r.width / 2, y: r.top + r.height / 2 } };
                 }
               }
               return { success: false, error: "Mode option not found in dropdown" };
@@ -1108,8 +1116,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           `);
           const selectRes = selectResult.result.value as {
             success: boolean;
+            at?: { x: number; y: number };
             error?: string;
           };
+          if (selectRes.success && selectRes.at) {
+            await cometClient.clickAt(selectRes.at.x, selectRes.at.y);
+          }
           if (selectRes.success) {
             return {
               content: [{ type: "text", text: `Switched to ${mode} mode` }],

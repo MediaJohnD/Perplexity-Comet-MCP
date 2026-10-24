@@ -1773,6 +1773,19 @@ export class CometCDPClient {
   }
 
   /**
+   * Click at viewport coordinates via CDP trusted mouse events. Unlike
+   * `element.click()`, this opens Radix dropdowns (they listen for pointerdown)
+   * and does not need the browser window to have OS focus.
+   */
+  async clickAt(x: number, y: number): Promise<void> {
+    this.ensureConnected();
+    const base = { x, y, button: "left", clickCount: 1 } as const;
+    await this.client!.Input.dispatchMouseEvent({ type: "mouseMoved", x, y });
+    await this.client!.Input.dispatchMouseEvent({ type: "mousePressed", ...base });
+    await this.client!.Input.dispatchMouseEvent({ type: "mouseReleased", ...base });
+  }
+
+  /**
    * Focus the connected tab; execCommand/pointer input is ignored in background tabs.
    */
   async bringToFront(): Promise<void> {
