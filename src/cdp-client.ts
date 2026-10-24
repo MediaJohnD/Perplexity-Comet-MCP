@@ -1773,6 +1773,14 @@ export class CometCDPClient {
   }
 
   /**
+   * Focus the connected tab; execCommand/pointer input is ignored in background tabs.
+   */
+  async bringToFront(): Promise<void> {
+    this.ensureConnected();
+    await this.client!.Page.bringToFront();
+  }
+
+  /**
    * Create a new tab
    */
   async newTab(url?: string): Promise<CDPTarget> {

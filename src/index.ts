@@ -49,6 +49,28 @@ function readPackageVersion(): string {
 const SERVER_VERSION = readPackageVersion();
 
 /**
+ * Comet's dropdown menus (mode switcher etc.) only open when the tab is
+ * actually OS-focused — a cold-launched window can report a connected CDP
+ * session while `document.visibilityState` is still "hidden", and
+ * `Page.bringToFront()` alone doesn't fix that (confirmed via live testing:
+ * the OS-level foreground window doesn't change even after bringToFront()).
+ * Surface this at connect time instead of letting it surface three tool
+ * calls later as a cryptic "Mode menu did not open" from comet_mode.
+ */
+async function checkTabFocus(client: typeof cometClient): Promise<string> {
+  try {
+    await client.bringToFront();
+    const result = await client.safeEvaluate("document.visibilityState");
+    const visible = result?.result?.value === "visible";
+    return visible
+      ? ""
+      : "\n⚠️ Comet window is not OS-focused (click into the Comet window once) — dropdown menus like comet_mode will fail to open until it is.";
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Wrap response text returned to the MCP client in untrusted-data markers.
  *
  * Comet's agent browses the open web and reads attacker-controllable
@@ -259,9 +281,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             await new Promise((resolve) => setTimeout(resolve, 1500));
           }
 
+          const focusNote = await checkTabFocus(cometClient);
+
           return {
             content: [
-              { type: "text", text: `${startResult}\nConnected to Perplexity` },
+              {
+                type: "text",
+                text: `${startResult}\nConnected to Perplexity${focusNote}`,
+              },
             ],
           };
         }
@@ -270,11 +297,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const newTab = await cometClient.newTab("https://www.perplexity.ai/");
         await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for page load
         await cometClient.connect(newTab.id);
+        const newTabFocusNote = await checkTabFocus(cometClient);
         return {
           content: [
             {
               type: "text",
-              text: `${startResult}\nCreated new tab and navigated to Perplexity`,
+              text: `${startResult}\nCreated new tab and navigated to Perplexity${newTabFocusNote}`,
             },
           ],
         };
