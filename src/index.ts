@@ -459,6 +459,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             await cometClient.connect(tabs.main.id);
           }
 
+          // A follow-up here would run in Computer and spend the allowance or credits.
+          const onComputer = await cometClient.evaluate(`location.pathname.startsWith("/computer") || document.querySelector('button[aria-label="Computer"]')?.getAttribute("aria-pressed") === "true"`);
+          if (onComputer.result.value === true) {
+            return {
+              content: [{ type: "text", text: "Not sent: this Comet tab is in Perplexity Computer, which spends the weekly allowance or credits. Use newChat: true for a free Search answer." }],
+              isError: true,
+            };
+          }
+
           const urlResult = await cometClient.evaluate("window.location.href");
           const currentUrl = urlResult.result.value as string;
           const isOnPerplexity = currentUrl?.includes("perplexity.ai");
