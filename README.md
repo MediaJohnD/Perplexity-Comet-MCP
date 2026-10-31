@@ -248,21 +248,19 @@ Closed github.com
 
 ### comet_mode
 
-Switch Perplexity search modes for different use cases.
+Read or switch the Perplexity surface.
 
 ```
 Parameters:
-  - mode (optional): "search", "research", "labs", or "learn"
+  - mode (optional): "search" or "computer"
 
 Returns: Current mode or confirmation of switch
 ```
 
 | Mode | Use Case |
 |------|----------|
-| search | Quick web searches |
-| research | Deep, comprehensive analysis |
-| labs | Data analytics and visualization |
-| learn | Educational explanations |
+| search | Web searches, free under Pro |
+| computer | Agentic work, spends the weekly Pro allowance |
 
 ---
 

@@ -192,13 +192,13 @@ const TOOLS: Tool[] = [
   {
     name: "comet_mode",
     description:
-      "Switch Perplexity search mode. Modes: 'search' (basic), 'research' (deep research), 'labs' (analytics/visualization), 'learn' (educational). Call without mode to see current mode.",
+      "Read or switch the Perplexity surface. 'search' is free under Pro; 'computer' spends the weekly Pro allowance. Omit mode to read the current surface.",
     inputSchema: {
       type: "object",
       properties: {
         mode: {
           type: "string",
-          enum: ["search", "research", "labs", "learn"],
+          enum: ["search", "computer"],
           description:
             "Mode to switch to (optional - omit to see current mode)",
         },
@@ -1002,172 +1002,48 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "comet_mode": {
         const mode = args?.mode as string | undefined;
-
-        // If no mode provided, show current mode
-        if (!mode) {
-          const result = await cometClient.evaluate(`
-            (() => {
-              // Try button group first (wide screen)
-              const modes = ['Search', 'Research', 'Labs', 'Learn'];
-              for (const mode of modes) {
-                const btn = document.querySelector('button[aria-label="' + mode + '"]');
-                if (btn && btn.getAttribute('data-state') === 'checked') {
-                  return mode.toLowerCase();
-                }
-              }
-              // Try dropdown (narrow screen) - look for the mode selector button
-              const dropdownBtn = document.querySelector('button[class*="gap"]');
-              if (dropdownBtn) {
-                const text = dropdownBtn.innerText.toLowerCase();
-                if (text.includes('search')) return 'search';
-                if (text.includes('research')) return 'research';
-                if (text.includes('labs')) return 'labs';
-                if (text.includes('learn')) return 'learn';
-              }
-              return 'search';
-            })()
-          `);
-
-          const currentMode = result.result.value as string;
-          const descriptions: Record<string, string> = {
-            search: "Basic web search",
-            research: "Deep research with comprehensive analysis",
-            labs: "Analytics, visualizations, and coding",
-            learn: "Educational content and explanations",
-          };
-
-          let output = `Current mode: ${currentMode}\n\nAvailable modes:\n`;
-          for (const [m, desc] of Object.entries(descriptions)) {
-            const marker = m === currentMode ? "→" : " ";
-            output += `${marker} ${m}: ${desc}\n`;
-          }
-
-          return { content: [{ type: "text", text: output }] };
-        }
-
-        // Switch mode
-        const modeMap: Record<string, string> = {
-          search: "Search",
-          research: "Research",
-          labs: "Labs",
-          learn: "Learn",
-        };
-        const ariaLabel = modeMap[mode];
-        if (!ariaLabel) {
+        const labels: Record<string, string> = { search: "Search", computer: "Computer" };
+        if (mode && !labels[mode]) {
           return {
-            content: [
-              {
-                type: "text",
-                text: `Invalid mode: ${mode}. Use: search, research, labs, learn`,
-              },
-            ],
+            content: [{ type: "text", text: `Invalid mode: ${mode}. Use: search, computer` }],
             isError: true,
           };
         }
 
-        // Navigate to Perplexity first if not there
-        const state = cometClient.currentState;
-        if (!state.currentUrl?.includes("perplexity.ai")) {
+        if (!cometClient.currentState.currentUrl?.includes("perplexity.ai")) {
           await cometClient.navigate("https://www.perplexity.ai/", true);
         }
 
-        // Try both UI patterns: button group (wide) and dropdown (narrow)
-        const result = await cometClient.evaluate(`
-          (() => {
-            // Strategy 1: Direct button (wide screen)
-            const center = (el) => {
-              const r = el.getBoundingClientRect();
-              return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-            };
-            const btn = document.querySelector('button[aria-label="${ariaLabel}"]');
+        // Reads aria-pressed before and after the click, so "search" is only reported when the page says so.
+        const result = await cometClient.evaluate(`(async () => {
+          const read = () => {
+            for (const label of ["Search", "Computer"]) {
+              const btn = document.querySelector('button[aria-label="' + label + '"]');
+              if (btn && btn.getAttribute("aria-pressed") === "true") return label.toLowerCase();
+            }
+            return "unknown";
+          };
+          const want = ${JSON.stringify(mode ? labels[mode] : null)};
+          if (want && read() !== want.toLowerCase()) {
+            const btn = document.querySelector('button[aria-label="' + want + '"]');
             if (btn) {
-              return { success: true, method: 'button', at: center(btn) };
+              btn.click();
+              await new Promise((r) => setTimeout(r, 500));
             }
-
-            // Strategy 2: Dropdown menu (narrow screen)
-            // Find and click the dropdown trigger (button with current mode text)
-            const allButtons = document.querySelectorAll('button');
-            for (const b of allButtons) {
-              const text = b.innerText.toLowerCase();
-              if ((text.includes('search') || text.includes('research') ||
-                   text.includes('labs') || text.includes('learn')) &&
-                  b.querySelector('svg')) {
-                return { success: true, method: 'dropdown-open', needsSelect: true, at: center(b) };
-              }
-            }
-
-            return { success: false, error: "Mode selector not found" };
-          })()
-        `);
-
-        const clickResult = result.result.value as {
-          success: boolean;
-          method?: string;
-          needsSelect?: boolean;
-          at?: { x: number; y: number };
-          error?: string;
-        };
-
-        // CDP mouse events work without OS focus, unlike element.click()
-        if (clickResult.success && clickResult.at) {
-          await cometClient.clickAt(clickResult.at.x, clickResult.at.y);
-        }
-
-        if (clickResult.success && clickResult.needsSelect) {
-          // Wait for dropdown to open, then select the mode
-          await new Promise((resolve) => setTimeout(resolve, 300));
-          // `mode` was validated against modeMap above, but encode anyway to
-          // guarantee any future caller cannot inject JS via this template.
-          const safeMode = JSON.stringify(mode);
-          const selectResult = await cometClient.evaluate(`
-            (() => {
-              // Look for dropdown menu items
-              const items = document.querySelectorAll('[role="menuitem"], [role="option"], button');
-              for (const item of items) {
-                if (item.innerText.toLowerCase().includes(${safeMode})) {
-                  const r = item.getBoundingClientRect();
-                  return { success: true, at: { x: r.left + r.width / 2, y: r.top + r.height / 2 } };
-                }
-              }
-              return { success: false, error: "Mode option not found in dropdown" };
-            })()
-          `);
-          const selectRes = selectResult.result.value as {
-            success: boolean;
-            at?: { x: number; y: number };
-            error?: string;
-          };
-          if (selectRes.success && selectRes.at) {
-            await cometClient.clickAt(selectRes.at.x, selectRes.at.y);
           }
-          if (selectRes.success) {
-            return {
-              content: [{ type: "text", text: `Switched to ${mode} mode` }],
-            };
-          } else {
-            return {
-              content: [{ type: "text", text: `Failed: ${selectRes.error}` }],
-              isError: true,
-            };
-          }
-        }
+          return read();
+        })()`);
+        const current = result.result.value as string;
 
-        if (clickResult.success) {
+        if (mode && current !== mode) {
           return {
-            content: [{ type: "text", text: `Switched to ${mode} mode` }],
-          };
-        } else {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Failed to switch mode: ${clickResult.error}`,
-              },
-            ],
+            content: [{ type: "text", text: `Could not confirm the switch to ${mode}. Current surface: ${current}. The selector is on the Perplexity home page; comet_ask with newChat goes there and forces Search.` }],
             isError: true,
           };
         }
+        return { content: [{ type: "text", text: `Current surface: ${current}${current === "computer" ? " (spends the weekly Pro allowance)" : ""}` }] };
       }
+
 
       case "comet_upload": {
         const filePath = args?.filePath as string;
