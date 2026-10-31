@@ -434,6 +434,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
             await new Promise((resolve) => setTimeout(resolve, 1500));
           }
+
+          // Perplexity restores the last surface, and Computer spends the weekly allowance.
+          // Refuse to send unless Search is confirmed selected.
+          const surface = await cometClient.evaluate(`(async () => {
+            const btn = document.querySelector('button[aria-label="Search"]');
+            if (!btn) return "missing";
+            if (btn.getAttribute("aria-pressed") !== "true") {
+              btn.click();
+              await new Promise((r) => setTimeout(r, 500));
+            }
+            return btn.getAttribute("aria-pressed") === "true" ? "search" : "unconfirmed";
+          })()`);
+          if (surface.result.value !== "search") {
+            return {
+              content: [{ type: "text", text: `Not sent: could not confirm Perplexity Search mode (${surface.result.value}). Computer spends the weekly allowance.` }],
+              isError: true,
+            };
+          }
         } else {
           // Not newChat - just ensure we're on Perplexity
           const tabs = await cometClient.listTabsCategorized();
