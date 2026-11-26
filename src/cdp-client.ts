@@ -331,7 +331,8 @@ function getCometPath(): string {
   const os = platform();
 
   // Check for custom path via environment variable
-  if (process.env.COMET_PATH) {
+  // (only when it exists: machines install Comet per-user or per-machine)
+  if (process.env.COMET_PATH && existsSync(process.env.COMET_PATH)) {
     return process.env.COMET_PATH;
   }
 
