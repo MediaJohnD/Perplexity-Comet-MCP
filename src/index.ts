@@ -5,6 +5,7 @@
 // Simplified to 6 essential tools
 
 import { ensureSearchMode } from "./search-guard.js";
+import { waitBudgetMs } from "./wait-budget.js";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -144,7 +145,7 @@ const TOOLS: Tool[] = [
         },
         timeout: {
           type: "number",
-          description: "Max wait time in ms (default: 120000 = 2min)",
+          description: "Max wait time in ms. Capped just under the MCP client timeout (108000 by default); a slower answer returns 'still in progress' and comet_poll collects it.",
         },
       },
       required: ["prompt"],
@@ -312,7 +313,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "comet_ask": {
         let prompt = args?.prompt as string;
         const context = args?.context as string | undefined;
-        const maxTimeout = (args?.timeout as number) || 120000; // Max 2 minutes safety net
+        // Whole-call budget, kept under the MCP client's own timeout so a slow
+        // answer comes back as "use comet_poll" instead of being killed.
+        const requestStart = Date.now();
+        const maxTimeout = waitBudgetMs(args?.timeout as number | undefined);
         const newChat = (args?.newChat as boolean) || false;
 
         // Validate prompt
@@ -515,7 +519,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let consecutiveErrors = 0;
         const MAX_CONSECUTIVE_ERRORS = 5;
 
-        while (Date.now() - startTime < maxTimeout) {
+        while (Date.now() - requestStart < maxTimeout) {
           await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
 
           try {
