@@ -6,6 +6,7 @@
 
 import { ensureSearchMode } from "./search-guard.js";
 import { waitBudgetMs } from "./wait-budget.js";
+import { acquire as acquireAskLock, release as releaseAskLock } from "./ask-lock.js";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -311,11 +312,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "comet_ask": {
+        // One caller at a time per machine: two asks in one Comet tab read each other's answers.
+        const callStart = Date.now(); // the lock wait counts against the client timeout too
+        if (!(await acquireAskLock(Number(process.env.COMET_LOCK_WAIT_MS) || 45000))) {
+          return {
+            content: [{ type: "text", text: "Comet is busy with another caller's question (lock held). Retry in a minute." }],
+            isError: true,
+          };
+        }
+        try {
         let prompt = args?.prompt as string;
         const context = args?.context as string | undefined;
         // Whole-call budget, kept under the MCP client's own timeout so a slow
         // answer comes back as "use comet_poll" instead of being killed.
-        const requestStart = Date.now();
+        const requestStart = callStart;
         const maxTimeout = waitBudgetMs(args?.timeout as number | undefined);
         const newChat = (args?.newChat as boolean) || false;
 
@@ -726,6 +736,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Keep task active since it may still be running
         sessionState.steps = stepsCollected;
         return { content: [{ type: "text", text: inProgressMsg }] };
+        } finally {
+          releaseAskLock();
+        }
       }
 
       case "comet_poll": {
