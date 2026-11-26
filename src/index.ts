@@ -73,6 +73,21 @@ async function checkTabFocus(client: typeof cometClient): Promise<string> {
   }
 }
 
+/** The bridge's own Comet profile starts signed out; Pro features (model picker, limits) need one sign-in. */
+async function checkSignedIn(client: typeof cometClient): Promise<string> {
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const r = await client.safeEvaluate(
+      `[...document.querySelectorAll('button,a')].some((b) => b.getBoundingClientRect().width > 0 && /^(sign in|log in)$/i.test(b.innerText.trim()))`,
+    );
+    return r?.result?.value === true
+      ? "\n⚠️ This Comet profile is signed out of Perplexity. Answers still work, but without Pro. Sign in once in the Comet bridge window to fix it."
+      : "";
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Wrap response text returned to the MCP client in untrusted-data markers.
  *
@@ -285,12 +300,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
 
           const focusNote = await checkTabFocus(cometClient);
+          const signInNote = await checkSignedIn(cometClient);
 
           return {
             content: [
               {
                 type: "text",
-                text: `${startResult}\nConnected to Perplexity${focusNote}`,
+                text: `${startResult}\nConnected to Perplexity${focusNote}${signInNote}`,
               },
             ],
           };

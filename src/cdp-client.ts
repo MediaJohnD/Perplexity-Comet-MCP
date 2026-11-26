@@ -5,6 +5,7 @@ import CDP from "chrome-remote-interface";
 import { spawn, ChildProcess, execSync } from "child_process";
 import { platform } from "os";
 import { existsSync } from "fs";
+import { join } from "path";
 import { validateUploadPath, validateSelector } from "./upload-validator.js";
 import type {
   CDPTarget,
@@ -387,11 +388,26 @@ export const DEFAULT_PORT = readPortFromEnv();
  *
  * See https://crbug.com/1247276 for the underlying mitigation.
  */
-function cometLaunchArgs(port: number): string[] {
-  return [
+/**
+ * The bridge runs Comet in its own profile so it never has to close the
+ * Comet John browses in (the old path force-killed every comet.exe to add
+ * the debug port) and his everyday profile never exposes a CDP port.
+ * COMET_USER_DATA_DIR=none restores the old shared-profile behaviour.
+ */
+export function bridgeProfileDir(env: NodeJS.ProcessEnv = process.env, windows = IS_WINDOWS): string | null {
+  const v = env.COMET_USER_DATA_DIR;
+  if (v !== undefined) return v === "" || v.toLowerCase() === "none" ? null : v;
+  if (!windows || !env.LOCALAPPDATA) return null;
+  return join(env.LOCALAPPDATA, "Perplexity", "CometBridgeProfile");
+}
+
+export function cometLaunchArgs(port: number, profile: string | null = bridgeProfileDir()): string[] {
+  const args = [
     `--remote-debugging-port=${port}`,
     `--remote-allow-origins=http://127.0.0.1`,
   ];
+  if (profile) args.push(`--user-data-dir=${profile}`, "--no-first-run", "https://www.perplexity.ai/");
+  return args;
 }
 
 export class CometCDPClient {
@@ -1246,8 +1262,10 @@ export class CometCDPClient {
         await testClient.close();
         return `Comet already running with debug port: ${port}`;
       } catch {
-        // Comet not running or not accessible, check if process exists
-        const isRunning = await this.isCometProcessRunning();
+        // Comet not running or not accessible, check if process exists.
+        // With the bridge's own profile, a running everyday Comet does not
+        // matter: a second instance starts beside it and nothing is killed.
+        const isRunning = bridgeProfileDir() ? false : await this.isCometProcessRunning();
         if (!isRunning) {
           // Start Comet
           this.cometProcess = spawn(COMET_PATH, cometLaunchArgs(port), {
