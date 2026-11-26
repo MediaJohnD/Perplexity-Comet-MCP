@@ -4,6 +4,7 @@
 // Claude Code ↔ Perplexity Comet bidirectional interaction
 // Simplified to 6 essential tools
 
+import { ensureSearchMode } from "./search-guard.js";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -192,13 +193,13 @@ const TOOLS: Tool[] = [
   {
     name: "comet_mode",
     description:
-      "Switch Perplexity search mode. Modes: 'search' (basic), 'research' (deep research), 'labs' (analytics/visualization), 'learn' (educational). Call without mode to see current mode.",
+      "Switch the Perplexity surface: 'search' (free) or 'computer' (spends the weekly Pro allowance). Call without mode to see the current surface. To guarantee Search, prefer comet_ask with newChat.",
     inputSchema: {
       type: "object",
       properties: {
         mode: {
           type: "string",
-          enum: ["search", "research", "labs", "learn"],
+          enum: ["search", "computer"],
           description:
             "Mode to switch to (optional - omit to see current mode)",
         },
@@ -448,6 +449,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (!isOnPerplexity) {
             await cometClient.navigate("https://www.perplexity.ai/", true);
             await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+        }
+
+        // The home page restores the last-used surface (Computer is sticky and
+        // spends the weekly allowance). Force Search and verify before sending.
+        if (newChat) {
+          const { ok, surface } = await ensureSearchMode(cometClient);
+          if (!ok) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: could not confirm Search mode on the Perplexity home page; refusing to send (Computer would spend the weekly allowance). Last state: ${JSON.stringify(surface)}. Check comet_screenshot.`,
+                },
+              ],
+              isError: true,
+            };
           }
         }
 
@@ -985,54 +1003,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "comet_mode": {
         const mode = args?.mode as string | undefined;
 
-        // If no mode provided, show current mode
+        // If no mode provided, report the surface the UI actually shows.
+        // The current UI has only Search and Computer (aria-pressed pills).
         if (!mode) {
           const result = await cometClient.evaluate(`
             (() => {
-              // Try button group first (wide screen)
-              const modes = ['Search', 'Research', 'Labs', 'Learn'];
-              for (const mode of modes) {
-                const btn = document.querySelector('button[aria-label="' + mode + '"]');
-                if (btn && btn.getAttribute('data-state') === 'checked') {
-                  return mode.toLowerCase();
-                }
+              for (const name of ['Search', 'Computer']) {
+                const b = [...document.querySelectorAll('button')].find((x) => x.getBoundingClientRect().width > 0 && (x.innerText.trim() === name || x.getAttribute('aria-label') === name));
+                if (b && b.getAttribute('aria-pressed') === 'true') return name.toLowerCase();
               }
-              // Try dropdown (narrow screen) - look for the mode selector button
-              const dropdownBtn = document.querySelector('button[class*="gap"]');
-              if (dropdownBtn) {
-                const text = dropdownBtn.innerText.toLowerCase();
-                if (text.includes('search')) return 'search';
-                if (text.includes('research')) return 'research';
-                if (text.includes('labs')) return 'labs';
-                if (text.includes('learn')) return 'learn';
-              }
-              return 'search';
+              return 'unknown';
             })()
           `);
-
           const currentMode = result.result.value as string;
-          const descriptions: Record<string, string> = {
-            search: "Basic web search",
-            research: "Deep research with comprehensive analysis",
-            labs: "Analytics, visualizations, and coding",
-            learn: "Educational content and explanations",
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Current surface: ${currentMode}
+
+Available: search (free), computer (spends weekly allowance; use comet_ask newChat to return to search).`,
+              },
+            ],
           };
-
-          let output = `Current mode: ${currentMode}\n\nAvailable modes:\n`;
-          for (const [m, desc] of Object.entries(descriptions)) {
-            const marker = m === currentMode ? "→" : " ";
-            output += `${marker} ${m}: ${desc}\n`;
-          }
-
-          return { content: [{ type: "text", text: output }] };
         }
 
         // Switch mode
         const modeMap: Record<string, string> = {
           search: "Search",
-          research: "Research",
-          labs: "Labs",
-          learn: "Learn",
+          computer: "Computer",
         };
         const ariaLabel = modeMap[mode];
         if (!ariaLabel) {
@@ -1040,7 +1039,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content: [
               {
                 type: "text",
-                text: `Invalid mode: ${mode}. Use: search, research, labs, learn`,
+                text: `Invalid mode: ${mode}. Use: search, computer`,
               },
             ],
             isError: true,
@@ -1135,8 +1134,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (clickResult.success) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const label = JSON.stringify(ariaLabel);
+          const check = await cometClient.evaluate(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.getBoundingClientRect().width > 0 && (x.innerText.trim() === ${label} || x.getAttribute('aria-label') === ${label})); return !!b && b.getAttribute('aria-pressed') === 'true'; })()`);
+          const confirmed = check.result.value === true;
           return {
-            content: [{ type: "text", text: `Switched to ${mode} mode` }],
+            content: [{ type: "text", text: confirmed ? `Switched to ${mode} mode (confirmed)` : `Clicked ${mode} but could not confirm it is active; check comet_screenshot.` }],
+            isError: !confirmed,
           };
         } else {
           return {

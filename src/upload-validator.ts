@@ -7,7 +7,7 @@
 
 import { realpathSync, statSync } from "fs";
 import { homedir } from "os";
-import { resolve as resolvePath, sep as PATH_SEP } from "path";
+import { parse as parsePath, resolve as resolvePath, sep as PATH_SEP } from "path";
 
 /**
  * Validate a user-supplied upload path against the optional allowlist root
@@ -49,12 +49,12 @@ export function validateUploadPath(filePath: string): string {
     throw new Error(`Not a regular file: ${filePath}`);
   }
 
-  const home = homedir();
+  const home = resolvePath(homedir());
   const root = process.env.COMET_UPLOAD_ROOT;
   if (root) {
     // Reject dangerously broad root values before resolving.
     const resolvedRoot = resolvePath(root);
-    if (resolvedRoot === "/" || resolvedRoot === home) {
+    if (resolvedRoot === parsePath(resolvedRoot).root || resolvedRoot === home) {
       throw new Error(
         `COMET_UPLOAD_ROOT is set to an overly broad value ("${resolvedRoot}"). ` +
           `Use a specific subdirectory (e.g., ~/uploads) to restrict allowed paths.`,
@@ -69,7 +69,7 @@ export function validateUploadPath(filePath: string): string {
     }
 
     // Also reject after symlink resolution (in case root itself is a symlink to /).
-    if (realRoot === "/" || realRoot === home) {
+    if (realRoot === parsePath(realRoot).root || realRoot === home) {
       throw new Error(
         `COMET_UPLOAD_ROOT resolves to an overly broad path ("${realRoot}"). ` +
           `Use a specific subdirectory to restrict allowed paths.`,
@@ -111,11 +111,11 @@ export function validateUploadPath(filePath: string): string {
     // .env files at home root
     resolvePath(home, ".env"),
     // System-level sensitive paths
-    "/etc/shadow",
-    "/etc/sudoers",
-    "/etc/passwd",
-    "/root",
-    "/proc", // block entire /proc subtree (maps, fd/*, environ for any PID)
+    resolvePath("/etc/shadow"),
+    resolvePath("/etc/sudoers"),
+    resolvePath("/etc/passwd"),
+    resolvePath("/root"),
+    resolvePath("/proc"), // block entire /proc subtree (maps, fd/*, environ for any PID)
   ];
 
   for (const prefix of blockedPrefixes) {

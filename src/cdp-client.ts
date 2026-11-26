@@ -1785,6 +1785,14 @@ export class CometCDPClient {
     await this.client!.Input.dispatchMouseEvent({ type: "mouseReleased", ...base });
   }
 
+  /** Force a real layout viewport; a hidden/minimized window reports 0x0 and every rect is off-screen. */
+  async ensureViewport(): Promise<void> {
+    this.ensureConnected();
+    await (this.client as any).Emulation.setDeviceMetricsOverride({
+      width: 1440, height: 900, deviceScaleFactor: 1, mobile: false,
+    });
+  }
+
   /**
    * Focus the connected tab; execCommand/pointer input is ignored in background tabs.
    */

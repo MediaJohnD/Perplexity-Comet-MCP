@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { resolve } from "path";
 
 // ---------------------------------------------------------------------------
 // Module-level mocks — must be hoisted before any imports of the module
@@ -49,44 +50,44 @@ describe("validateUploadPath — /proc subtree blocking", () => {
   });
 
   it("blocks /proc/self/environ", () => {
-    mockFile("/proc/self/environ");
-    expect(() => validateUploadPath("/proc/self/environ")).toThrow(
+    mockFile(resolve("/proc/self/environ"));
+    expect(() => validateUploadPath(resolve("/proc/self/environ"))).toThrow(
       /sensitive path/,
     );
   });
 
   it("blocks /proc/self/maps", () => {
-    mockFile("/proc/self/maps");
-    expect(() => validateUploadPath("/proc/self/maps")).toThrow(
+    mockFile(resolve("/proc/self/maps"));
+    expect(() => validateUploadPath(resolve("/proc/self/maps"))).toThrow(
       /sensitive path/,
     );
   });
 
   it("blocks /proc/self/fd/0", () => {
-    mockFile("/proc/self/fd/0");
-    expect(() => validateUploadPath("/proc/self/fd/0")).toThrow(
+    mockFile(resolve("/proc/self/fd/0"));
+    expect(() => validateUploadPath(resolve("/proc/self/fd/0"))).toThrow(
       /sensitive path/,
     );
   });
 
   it("blocks /proc/1/environ (root process)", () => {
-    mockFile("/proc/1/environ");
-    expect(() => validateUploadPath("/proc/1/environ")).toThrow(
+    mockFile(resolve("/proc/1/environ"));
+    expect(() => validateUploadPath(resolve("/proc/1/environ"))).toThrow(
       /sensitive path/,
     );
   });
 
   it("blocks /proc/12345/mem (arbitrary PID memory)", () => {
-    mockFile("/proc/12345/mem");
-    expect(() => validateUploadPath("/proc/12345/mem")).toThrow(
+    mockFile(resolve("/proc/12345/mem"));
+    expect(() => validateUploadPath(resolve("/proc/12345/mem"))).toThrow(
       /sensitive path/,
     );
   });
 
   it("blocks the /proc mount point itself if it ever resolves as a file", () => {
     // /proc as an exact match (real === prefix)
-    mockFile("/proc");
-    expect(() => validateUploadPath("/proc")).toThrow(/sensitive path/);
+    mockFile(resolve("/proc"));
+    expect(() => validateUploadPath(resolve("/proc"))).toThrow(/sensitive path/);
   });
 });
 
@@ -98,25 +99,25 @@ describe("validateUploadPath — home-dir sensitive path blocking", () => {
   });
 
   it("blocks ~/.ssh/id_rsa", () => {
-    mockFile("/home/testuser/.ssh/id_rsa");
+    mockFile(resolve("/home/testuser/.ssh/id_rsa"));
     expect(() => validateUploadPath("~/.ssh/id_rsa")).toThrow(/sensitive path/);
   });
 
   it("blocks ~/.aws/credentials", () => {
-    mockFile("/home/testuser/.aws/credentials");
+    mockFile(resolve("/home/testuser/.aws/credentials"));
     expect(() => validateUploadPath("~/.aws/credentials")).toThrow(
       /sensitive path/,
     );
   });
 
   it("blocks /etc/shadow", () => {
-    mockFile("/etc/shadow");
-    expect(() => validateUploadPath("/etc/shadow")).toThrow(/sensitive path/);
+    mockFile(resolve("/etc/shadow"));
+    expect(() => validateUploadPath(resolve("/etc/shadow"))).toThrow(/sensitive path/);
   });
 
   it("blocks /root/secret.txt (under /root)", () => {
-    mockFile("/root/secret.txt");
-    expect(() => validateUploadPath("/root/secret.txt")).toThrow(
+    mockFile(resolve("/root/secret.txt"));
+    expect(() => validateUploadPath(resolve("/root/secret.txt"))).toThrow(
       /sensitive path/,
     );
   });
@@ -130,13 +131,13 @@ describe("validateUploadPath — .env file blocking", () => {
   });
 
   it("blocks .env at home root", () => {
-    mockFile("/home/testuser/.env");
+    mockFile(resolve("/home/testuser/.env"));
     expect(() => validateUploadPath("~/.env")).toThrow(/sensitive path/);
   });
 
   it("blocks .env.production anywhere on the filesystem", () => {
-    mockFile("/var/app/.env.production");
-    expect(() => validateUploadPath("/var/app/.env.production")).toThrow(
+    mockFile(resolve("/var/app/.env.production"));
+    expect(() => validateUploadPath(resolve("/var/app/.env.production"))).toThrow(
       /environment file/,
     );
   });
@@ -150,15 +151,15 @@ describe("validateUploadPath — valid paths (no COMET_UPLOAD_ROOT)", () => {
   });
 
   it("allows a regular file under /tmp", () => {
-    mockFile("/tmp/document.pdf");
-    const result = validateUploadPath("/tmp/document.pdf");
-    expect(result).toBe("/tmp/document.pdf");
+    mockFile(resolve("/tmp/document.pdf"));
+    const result = validateUploadPath(resolve("/tmp/document.pdf"));
+    expect(result).toBe(resolve("/tmp/document.pdf"));
   });
 
   it("allows a regular file under /home/testuser/uploads", () => {
-    mockFile("/home/testuser/uploads/photo.jpg");
-    const result = validateUploadPath("/home/testuser/uploads/photo.jpg");
-    expect(result).toBe("/home/testuser/uploads/photo.jpg");
+    mockFile(resolve("/home/testuser/uploads/photo.jpg"));
+    const result = validateUploadPath(resolve("/home/testuser/uploads/photo.jpg"));
+    expect(result).toBe(resolve("/home/testuser/uploads/photo.jpg"));
   });
 });
 
@@ -173,33 +174,33 @@ describe("validateUploadPath — COMET_UPLOAD_ROOT allowlist", () => {
   });
 
   it("allows a path inside COMET_UPLOAD_ROOT", () => {
-    process.env.COMET_UPLOAD_ROOT = "/home/testuser/uploads";
+    process.env.COMET_UPLOAD_ROOT = resolve("/home/testuser/uploads");
     mockRealpathSync
-      .mockReturnValueOnce("/home/testuser/uploads/file.txt") // resolves filePath
-      .mockReturnValueOnce("/home/testuser/uploads"); // resolves root
+      .mockReturnValueOnce(resolve("/home/testuser/uploads/file.txt")) // resolves filePath
+      .mockReturnValueOnce(resolve("/home/testuser/uploads")); // resolves root
     mockStatSync.mockReturnValue({ isFile: () => true });
 
-    const result = validateUploadPath("/home/testuser/uploads/file.txt");
-    expect(result).toBe("/home/testuser/uploads/file.txt");
+    const result = validateUploadPath(resolve("/home/testuser/uploads/file.txt"));
+    expect(result).toBe(resolve("/home/testuser/uploads/file.txt"));
   });
 
   it("rejects a path outside COMET_UPLOAD_ROOT", () => {
-    process.env.COMET_UPLOAD_ROOT = "/home/testuser/uploads";
+    process.env.COMET_UPLOAD_ROOT = resolve("/home/testuser/uploads");
     mockRealpathSync
-      .mockReturnValueOnce("/etc/passwd") // resolves filePath
-      .mockReturnValueOnce("/home/testuser/uploads"); // resolves root
+      .mockReturnValueOnce(resolve("/etc/passwd")) // resolves filePath
+      .mockReturnValueOnce(resolve("/home/testuser/uploads")); // resolves root
     mockStatSync.mockReturnValue({ isFile: () => true });
 
-    expect(() => validateUploadPath("/etc/passwd")).toThrow(
+    expect(() => validateUploadPath(resolve("/etc/passwd"))).toThrow(
       /outside COMET_UPLOAD_ROOT/,
     );
   });
 
   it("rejects COMET_UPLOAD_ROOT set to /", () => {
-    process.env.COMET_UPLOAD_ROOT = "/";
-    mockFile("/tmp/file.txt");
+    process.env.COMET_UPLOAD_ROOT = resolve("/");
+    mockFile(resolve("/tmp/file.txt"));
 
-    expect(() => validateUploadPath("/tmp/file.txt")).toThrow(/overly broad/);
+    expect(() => validateUploadPath(resolve("/tmp/file.txt"))).toThrow(/overly broad/);
   });
 });
 
@@ -217,7 +218,7 @@ describe("validateUploadPath — error cases", () => {
       throw err;
     });
 
-    expect(() => validateUploadPath("/nonexistent/file.txt")).toThrow(
+    expect(() => validateUploadPath(resolve("/nonexistent/file.txt"))).toThrow(
       /File not found/,
     );
   });
@@ -226,7 +227,7 @@ describe("validateUploadPath — error cases", () => {
     mockRealpathSync.mockReturnValue("/tmp/somedir");
     mockStatSync.mockReturnValue({ isFile: () => false });
 
-    expect(() => validateUploadPath("/tmp/somedir")).toThrow(
+    expect(() => validateUploadPath(resolve("/tmp/somedir"))).toThrow(
       /Not a regular file/,
     );
   });
